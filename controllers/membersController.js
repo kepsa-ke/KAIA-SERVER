@@ -62,7 +62,7 @@ exports.getAllMembers = asyncHandler(async (req, res) => {
 //fetch only approved members
 exports.fetchApprovedMembers = asyncHandler(async (req, res) => {
   let approved = true;
-  const members = await Member.find({ approved }).sort({ $natural: -1 });
+  const members = await Member.find({ approved });
   if (members) {
     res.status(200).json(members);
     return;
