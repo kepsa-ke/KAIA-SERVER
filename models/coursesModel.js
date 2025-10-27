@@ -39,6 +39,17 @@ const coursesSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // New fields for segmentation
+    segment: {
+      type: String,
+      enum: ["featured", "topic", "role"], // classification of the course
+      default: "role", // all existing courses fall under 'by role'
+    },
+    featured: {
+      type: Boolean,
+      default: false, // only admin can toggle this true
+    },
   },
   { timestamps: true }
 );

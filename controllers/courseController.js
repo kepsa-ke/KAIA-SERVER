@@ -4,14 +4,24 @@ const cloudinary = require("../config/cloudinary");
 const asyncHandler = require("express-async-handler");
 
 // create a course
+// create a course
 exports.createCourse = asyncHandler(async (req, res) => {
   // Validate request body
   if (!req.body) {
-    res.status(400).send("No request body provided");
-    return;
+    return res.status(400).send("No request body provided");
   }
 
-  const { title, desc, link, tag, organization, category, image } = req.body;
+  const {
+    title,
+    desc,
+    link,
+    tag,
+    organization,
+    category,
+    image,
+    segment,
+    featured,
+  } = req.body;
 
   const requiredFields = [
     "title",
@@ -25,15 +35,27 @@ exports.createCourse = asyncHandler(async (req, res) => {
 
   for (const field of requiredFields) {
     if (!req.body[field]) {
-      res.status(400).send(`Missing required field: ${field}`);
-      return;
+      return res.status(400).send(`Missing required field: ${field}`);
     }
   }
 
-  let email = req.user.email; //get email from user through middleware
+  let email = req.user?.email; // get email from user through middleware
   if (!email) {
-    res.status(400).send("no email passed with request");
-    return;
+    return res.status(400).send("No email passed with request");
+  }
+
+  // Ensure segment is valid and default safely
+  const validSegments = ["topic", "role"];
+  const courseSegment = validSegments.includes(segment) ? segment : "role";
+
+  // Ensure only admin can feature and only one featured at a time
+  let isFeatured = false;
+  if (featured && req.user?.isAdmin) {
+    const existingFeatured = await Course.findOne({ featured: true });
+    if (existingFeatured) {
+      return res.status(400).send("Only one course can be featured at a time");
+    }
+    isFeatured = true;
   }
 
   const course = await Course.create({
@@ -45,14 +67,14 @@ exports.createCourse = asyncHandler(async (req, res) => {
     category,
     email,
     image,
+    segment: courseSegment, // either "topic" or "role" (default)
+    featured: isFeatured,
   });
 
   if (course) {
-    res.status(201).json(course);
-    return;
+    return res.status(201).json(course);
   } else {
-    res.status(500).send("something went wrong");
-    return;
+    return res.status(500).send("Something went wrong");
   }
 });
 
@@ -93,9 +115,24 @@ exports.fetchSpecifiCourse = asyncHandler(async (req, res) => {
 exports.updateSpecificCourse = asyncHandler(async (req, res) => {
   // Validate request body
   if (!req.body) {
-    res.status(400).send("No request body provided");
-    return;
+    return res.status(400).send("No request body provided");
   }
+
+  // If the user is trying to set this course as featured
+  if (req.body.isFeatured === true) {
+    // Check if there is already another featured course
+    const existingFeatured = await Course.findOne({
+      isFeatured: true,
+    });
+
+    if (existingFeatured) {
+      return res.status(400).json({
+        message: `Another course ("${existingFeatured.title}") is already featured. Unfeature it first.`,
+      });
+    }
+  }
+
+  // Proceed to update
   const updatedCourse = await Course.findByIdAndUpdate(
     req.params.id,
     req.body,
@@ -107,7 +144,7 @@ exports.updateSpecificCourse = asyncHandler(async (req, res) => {
   if (updatedCourse) {
     res.status(200).json(updatedCourse);
   } else {
-    res.status(500).send("Error Updating Course");
+    res.status(500).send("Error updating course");
   }
 });
 
