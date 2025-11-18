@@ -200,8 +200,7 @@ exports.toggleApproval = asyncHandler(async (req, res) => {
       <h2>Welcome to AI Skilling Alliance!</h2>
       <p>Dear ${fullName},</p>
       <p>Congratulations! Your application to join the Kenya AI Skilling Alliance (KAISA) has been approved.</p>
-      <p>You can now access KAISA programs, training opportunities and partner resources.
-Welcome to the Alliance!
+      <p>You can now access and or upload courses, get KAISA programs, training opportunities and partner resources.
 </p>
       <p><strong>Please use the following to details to sign in</strong></p>
       <ul>

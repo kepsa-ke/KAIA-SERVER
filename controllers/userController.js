@@ -15,7 +15,7 @@ const shareEmailWithJohn = asyncHandler(async (req, res) => {
       <h2>Welcome to AI Skilling Alliance!</h2>
       <p>Dear ${newUser},</p>
       <p>Thank you for registering with the AI Skilling Alliance. Your account has been successfully created.</p>
-      <p>You can now access all our resources and start your AI learning journey.</p>
+      <p>You can now access and or upload courses, get KAISA programs, training opportunities and partner resources.</p>
       <p><strong>Next Steps:</strong></p>
       <ul>
         <li>Complete your profile</li>
