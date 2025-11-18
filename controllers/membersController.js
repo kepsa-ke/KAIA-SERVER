@@ -1,5 +1,11 @@
 const Member = require("../models/membersModel");
 const asyncHandler = require("express-async-handler");
+const User = require("../models/userModels");
+const {
+  sendEmail,
+  generateEmailTemplate,
+} = require("../config/emails/emailFunction");
+const bcrypt = require("bcryptjs");
 
 // create a member
 exports.createMember = asyncHandler(async (req, res) => {
@@ -9,8 +15,16 @@ exports.createMember = asyncHandler(async (req, res) => {
     return;
   }
 
-  const { firstName, surName, role, email, phone, organizationName, website } =
-    req.body;
+  const {
+    firstName,
+    surName,
+    role,
+    email,
+    phone,
+    organizationName,
+    website,
+    category,
+  } = req.body;
 
   const requiredFields = [
     "firstName",
@@ -20,6 +34,7 @@ exports.createMember = asyncHandler(async (req, res) => {
     "phone",
     "organizationName",
     "website",
+    "category",
   ];
 
   for (const field of requiredFields) {
@@ -37,6 +52,7 @@ exports.createMember = asyncHandler(async (req, res) => {
     phone,
     organizationName,
     website,
+    category,
   });
 
   if (member) {
@@ -147,6 +163,97 @@ exports.toggleApproval = asyncHandler(async (req, res) => {
     { approved: !member.approved },
     { new: true }
   );
+
+  // if member is approved: create user details in auth system, send an email notification.
+  if (updatedMember.approved) {
+    const { email, organizationName, phone } = updatedMember;
+    const password = Math.random().toString(36).slice(-8); // generate a random password
+
+    // Check for existing records
+    const existingUser = await User.findOne({
+      $or: [{ email: email }, { phone: phone }],
+    });
+    if (existingUser) {
+      if (existingUser.email === email) {
+        res.status(400).send(`Email: ${email} already exists`);
+        return;
+      }
+      if (existingUser.phone === phone) {
+        res.status(400).send(`Phone: ${phone} already exists`);
+        return;
+      }
+    }
+    // hash the password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    // Create user
+    const user = await User.create({
+      email: email,
+      organizationName: organizationName,
+      phone: phone,
+      password: hashedPassword,
+    });
+    if (user) {
+      // send email notification logic here
+      let fullName = `${updatedMember.firstName} ${updatedMember.surName}`;
+      const emailContent = `
+      <h2>Welcome to AI Skilling Alliance!</h2>
+      <p>Dear ${fullName},</p>
+      <p>Congratulations! Your application to join the Kenya AI Skilling Alliance (KAISA) has been approved.</p>
+      <p>You can now access KAISA programs, training opportunities and partner resources.
+Welcome to the Alliance!
+</p>
+      <p><strong>Please use the following to details to sign in</strong></p>
+      <ul>
+        <li>Email: ${email}</li>
+        <li>Password: ${password}</li>
+      </ul>
+      <p>We're excited to have you on board!</p>
+      <br>
+      <p>Best regards,<br>AI Skilling Alliance Team</p>
+    `;
+
+      await sendEmail({
+        to: email, // receiver email address
+        subject: "Your KAISA Membership Has Been Approved",
+        html: generateEmailTemplate(
+          emailContent,
+          "Your KAISA Membership Has Been Approved"
+        ),
+      });
+    }
+  }
+
+  // if member is unapproved: send an email notification and delete user from db.
+  if (!updatedMember.approved) {
+    const { email } = updatedMember;
+    // Delete user
+    await User.findOneAndDelete({ email: email });
+    // send email notification logic here
+    let fullName = `${updatedMember.firstName} ${updatedMember.surName}`;
+    const emailContent = `
+      <h2>KAISA Membership Update!</h2>
+      <p>Dear ${fullName},</p>
+      <p>We regret to inform you that your membership with the Kenya AI Skilling Alliance (KAISA) has been revoked.</p>
+      <p>If you believe this is a mistake or have any questions, please contact our support team for assistance.
+</p>
+     
+       <p>We appreciate your understanding in this matter.</p>
+      <br>
+      <p>Best regards,<br>AI Skilling Alliance Team</p>
+      <br>
+     
+    `;
+
+    await sendEmail({
+      to: email, // receiver email address
+      subject: "Your KAISA Membership Has Been Revoked",
+      html: generateEmailTemplate(
+        emailContent,
+        "Your KAISA Membership Has Been Revoked"
+      ),
+    });
+  }
 
   if (!updatedMember) {
     res.status(400).send("Failed to update approved status");

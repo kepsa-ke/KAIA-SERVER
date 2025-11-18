@@ -2,6 +2,43 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const asyncHandler = require("express-async-handler");
 const User = require("../models/userModels");
+const {
+  sendEmail,
+  generateEmailTemplate,
+} = require("../config/emails/emailFunction");
+
+const shareEmailWithJohn = asyncHandler(async (req, res) => {
+  let newUser = "John Doe";
+  let newEmail = "johnspaxxvile@gmail.com";
+  // Send welcome email
+  const emailContent = `
+      <h2>Welcome to AI Skilling Alliance!</h2>
+      <p>Dear ${newUser},</p>
+      <p>Thank you for registering with the AI Skilling Alliance. Your account has been successfully created.</p>
+      <p>You can now access all our resources and start your AI learning journey.</p>
+      <p><strong>Next Steps:</strong></p>
+      <ul>
+        <li>Complete your profile</li>
+        <li>Explore available courses</li>
+        <li>Join our community forums</li>
+      </ul>
+      <p>We're excited to have you on board!</p>
+      <br>
+      <p>Best regards,<br>AI Skilling Alliance Team</p>
+    `;
+
+  await sendEmail({
+    to: newEmail, // receiver email address
+    subject:
+      "Welcome to AI Skilling Alliance - Account Registration Successful",
+    html: generateEmailTemplate(
+      emailContent,
+      "Welcome to AI Skilling Alliance"
+    ),
+  });
+
+  res.status(201).json({ message: "User registered successfully", newUser });
+});
 
 exports.registerUser = asyncHandler(async (req, res) => {
   // Validate request body
@@ -9,17 +46,8 @@ exports.registerUser = asyncHandler(async (req, res) => {
     res.status(400).send("No request body provided");
     return;
   }
-
-  const { username, email, organizationName, phone, password } = req.body;
-
-  const requiredFields = [
-    "username",
-    "email",
-    "organizationName",
-    "phone",
-    "password",
-  ];
-
+  const { email, organizationName, phone, password } = req.body;
+  const requiredFields = ["email", "organizationName", "phone", "password"];
   for (const field of requiredFields) {
     if (!req.body[field]) {
       res.status(400).send(`Missing required field: ${field}`);
@@ -27,20 +55,13 @@ exports.registerUser = asyncHandler(async (req, res) => {
     }
   }
 
-  const newUsername = username.trim();
   const newEmail = email.trim(); //remove white spaces
   const newPhone = phone.trim();
-
   // Check for existing records
   const existingUser = await User.findOne({
-    $or: [{ username: newUsername }, { email: newEmail }, { phone: newPhone }],
+    $or: [{ email: newEmail }, { phone: newPhone }],
   });
-
   if (existingUser) {
-    if (existingUser.username === newUsername) {
-      res.status(400).send("Username already exists");
-      return;
-    }
     if (existingUser.email === newEmail) {
       res.status(400).send(`Email: ${newEmail} already exists`);
       return;
@@ -50,24 +71,19 @@ exports.registerUser = asyncHandler(async (req, res) => {
       return;
     }
   }
-
   // hash the password
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash(password, salt);
-
   // Create user
   const user = await User.create({
-    username: newUsername,
     email: newEmail,
     phone: newPhone,
     organizationName,
     password: hashedPassword,
   });
-
   if (user) {
     res.status(201).json({
       _id: user.id,
-      username: user.username,
       email: user.email,
       phone: user.phone,
       organizationName: user.organizationName,
@@ -112,7 +128,6 @@ exports.loginUser = asyncHandler(async (req, res) => {
   if (user && (await bcrypt.compare(password, user.password))) {
     res.json({
       _id: user.id,
-      username: user.username,
       email: user.email,
       phone: user.phone,
       organizationName: user.organizationName,

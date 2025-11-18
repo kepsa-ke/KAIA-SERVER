@@ -31,6 +31,10 @@ const membersSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    category: {
+      type: String,
+      default: "",
+    },
     approved: {
       type: Boolean,
       default: false,
