@@ -6,6 +6,7 @@ const {
   generateEmailTemplate,
 } = require("../config/emails/emailFunction");
 const bcrypt = require("bcryptjs");
+const mongoose = require("mongoose");
 
 // create a member
 exports.createMember = asyncHandler(async (req, res) => {
@@ -44,12 +45,35 @@ exports.createMember = asyncHandler(async (req, res) => {
     }
   }
 
+  let newEmail = email.toString().trim().toLowerCase();
+  let newPhone = phone.toString().trim();
+
+  // Check for existing organization
+  const existingMember = await Member.findOne({
+    $or: [{ email: newEmail }, { phone: newPhone }],
+  });
+
+  if (existingMember) {
+    if (existingMember.email === newEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "A member with this email already exists",
+      });
+    }
+    if (existingMember.phone === newPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "A member with this phone number already exists",
+      });
+    }
+  }
+
   const member = await Member.create({
     firstName,
     surName,
     role,
-    email,
-    phone,
+    email: newEmail,
+    phone: newPhone,
     organizationName,
     website,
     category,
@@ -143,121 +167,380 @@ exports.deleteOrganization = asyncHandler(async (req, res) => {
     res.status(500).send("member not found");
   } else {
     await Member.findByIdAndDelete(req.params.id);
+
+    // Delete user account if exists
+    const { email } = member;
+    const isApproved = member.approved;
+    if (isApproved) {
+      await User.findOneAndDelete({ email });
+    }
+
     res.status(200).json({ message: "Member deleted successfully" });
   }
 });
 
+// exports.toggleApproval = asyncHandler(async (req, res) => {
+//   const memberId = req.params.id;
+
+//   // Find member and validate existence
+//   const member = await Member.findById(memberId);
+//   if (!member) {
+//     res.status(400).send("member not found");
+//     return;
+//   }
+
+//   // Toggle approval status
+//   const updatedMember = await Member.findByIdAndUpdate(
+//     memberId,
+//     { approved: !member.approved },
+//     { new: true }
+//   );
+
+//   // if member is approved: create user details in auth system, send an email notification.
+//   if (updatedMember.approved) {
+//     const { email, organizationName, phone } = updatedMember;
+//     const password = Math.random().toString(36).slice(-8); // generate a random password
+
+//     // Check for existing records
+//     const existingUser = await User.findOne({
+//       $or: [{ email: email }, { phone: phone }],
+//     });
+//     if (existingUser) {
+//       if (existingUser.email === email) {
+//         res.status(400).send(`Email: ${email} already exists`);
+//         return;
+//       }
+//       if (existingUser.phone === phone) {
+//         res.status(400).send(`Phone: ${phone} already exists`);
+//         return;
+//       }
+//     }
+//     // hash the password
+//     const salt = await bcrypt.genSalt(10);
+//     const hashedPassword = await bcrypt.hash(password, salt);
+//     // Create user
+//     const user = await User.create({
+//       email: email,
+//       organizationName: organizationName,
+//       phone: phone,
+//       password: hashedPassword,
+//     });
+//     if (user) {
+//       // send email notification logic here
+//       let fullName = `${updatedMember.firstName} ${updatedMember.surName}`;
+//       const emailContent = `
+//       <h2>Welcome to AI Skilling Alliance!</h2>
+//       <p>Dear ${fullName},</p>
+//       <p>Congratulations! Your application to join the Kenya AI Skilling Alliance (KAISA) has been approved.</p>
+//       <p>You can now access and or upload courses, get KAISA programs, training opportunities and partner resources.
+// </p>
+//       <p><strong>Please use the following to details to sign in</strong></p>
+//       <ul>
+//         <li>Email: ${email}</li>
+//         <li>Password: ${password}</li>
+//       </ul>
+//       <p>We're excited to have you on board!</p>
+//       <br>
+//       <p>Best regards,<br>AI Skilling Alliance Team</p>
+//     `;
+
+//       await sendEmail({
+//         to: email, // receiver email address
+//         subject: "Your KAISA Membership Has Been Approved",
+//         html: generateEmailTemplate(
+//           emailContent,
+//           "Your KAISA Membership Has Been Approved"
+//         ),
+//       });
+//     }
+//   }
+
+//   // if member is unapproved: send an email notification and delete user from db.
+//   if (!updatedMember.approved) {
+//     const { email } = updatedMember;
+//     // Delete user
+//     await User.findOneAndDelete({ email: email });
+//     // send email notification logic here
+//     let fullName = `${updatedMember.firstName} ${updatedMember.surName}`;
+//     const emailContent = `
+//       <h2>KAISA Membership Update!</h2>
+//       <p>Dear ${fullName},</p>
+//       <p>We regret to inform you that your membership with the Kenya AI Skilling Alliance (KAISA) has been revoked.</p>
+//       <p>If you believe this is a mistake or have any questions, please contact our support team for assistance.
+// </p>
+
+//        <p>We appreciate your understanding in this matter.</p>
+//       <br>
+//       <p>Best regards,<br>AI Skilling Alliance Team</p>
+//       <br>
+
+//     `;
+
+//     await sendEmail({
+//       to: email, // receiver email address
+//       subject: "Your KAISA Membership Has Been Revoked",
+//       html: generateEmailTemplate(
+//         emailContent,
+//         "Your KAISA Membership Has Been Revoked"
+//       ),
+//     });
+//   }
+
+//   if (!updatedMember) {
+//     res.status(400).send("Failed to update approved status");
+//     return;
+//   }
+
+//   res.json(updatedMember);
+// });
+
 exports.toggleApproval = asyncHandler(async (req, res) => {
   const memberId = req.params.id;
 
-  // Find member and validate existence
-  const member = await Member.findById(memberId);
-  if (!member) {
-    res.status(400).send("member not found");
-    return;
-  }
+  try {
+    // Validate member ID
+    if (!mongoose.Types.ObjectId.isValid(memberId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid member ID format",
+      });
+    }
 
-  // Toggle approval status
-  const updatedMember = await Member.findByIdAndUpdate(
-    memberId,
-    { approved: !member.approved },
-    { new: true }
-  );
+    // Find member with proper error handling
+    const member = await Member.findById(memberId);
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found",
+      });
+    }
 
-  // if member is approved: create user details in auth system, send an email notification.
-  if (updatedMember.approved) {
-    const { email, organizationName, phone } = updatedMember;
-    const password = Math.random().toString(36).slice(-8); // generate a random password
+    // Toggle approval status
+    const newApprovalStatus = !member.approved;
+    const updatedMember = await Member.findByIdAndUpdate(
+      memberId,
+      { approved: newApprovalStatus },
+      { new: true, runValidators: true }
+    );
 
-    // Check for existing records
-    const existingUser = await User.findOne({
-      $or: [{ email: email }, { phone: phone }],
+    if (!updatedMember) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update member approval status",
+      });
+    }
+
+    // Handle approval flow
+    if (newApprovalStatus) {
+      await handleMemberApproval(updatedMember);
+    } else {
+      await handleMemberDisapproval(updatedMember);
+    }
+
+    res.json({
+      success: true,
+      message: `Member ${
+        newApprovalStatus ? "approved" : "disapproved"
+      } successfully`,
+      data: updatedMember,
     });
+  } catch (error) {
+    console.error("Toggle approval error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while processing approval",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+});
+
+// Helper function for member approval
+const handleMemberApproval = async (member) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { email, organizationName, phone, firstName, surName } = member;
+
+    // Check for existing user
+    const existingUser = await User.findOne({
+      $or: [{ email }, { phone }],
+    }).session(session);
+
     if (existingUser) {
       if (existingUser.email === email) {
-        res.status(400).send(`Email: ${email} already exists`);
-        return;
+        throw new Error(`User with email ${email} already exists`);
       }
       if (existingUser.phone === phone) {
-        res.status(400).send(`Phone: ${phone} already exists`);
-        return;
+        throw new Error(`User with phone ${phone} already exists`);
       }
     }
-    // hash the password
-    const salt = await bcrypt.genSalt(10);
+
+    // Generate secure random password
+    const password = Math.random().toString(36).slice(-8); // generate a random password;
+
+    // Hash password
+    const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
-    // Create user
-    const user = await User.create({
-      email: email,
-      organizationName: organizationName,
-      phone: phone,
-      password: hashedPassword,
-    });
-    if (user) {
-      // send email notification logic here
-      let fullName = `${updatedMember.firstName} ${updatedMember.surName}`;
-      const emailContent = `
+
+    // Create user account
+    const user = await User.create(
+      [
+        {
+          email,
+          organizationName,
+          phone,
+          password: hashedPassword,
+          username: `${firstName.toLowerCase()}.${surName.toLowerCase()}`,
+          isActive: true,
+        },
+      ],
+      { session }
+    );
+
+    if (!user || user.length === 0) {
+      throw new Error("Failed to create user account");
+    }
+
+    // Prepare and send approval email
+    await sendApprovalEmail(member, password);
+
+    await session.commitTransaction();
+    console.log(
+      `Successfully approved member: ${email} and created user account`
+    );
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Member approval failed:", error);
+
+    // Revert member approval status if user creation fails
+    await Member.findByIdAndUpdate(member._id, { approved: false });
+
+    throw new Error(`Failed to approve member: ${error.message}`);
+  } finally {
+    session.endSession();
+  }
+};
+
+// Helper function for member disapproval
+const handleMemberDisapproval = async (member) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { email, firstName, surName } = member;
+
+    // Delete user account if exists
+    const deletedUser = await User.findOneAndDelete({ email }).session(session);
+
+    if (deletedUser) {
+      console.log(`Deleted user account for: ${email}`);
+    }
+
+    // Send disapproval email
+    await sendDisapprovalEmail(member);
+
+    await session.commitTransaction();
+    console.log(`Successfully disapproved member: ${email}`);
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Member disapproval failed:", error);
+    throw new Error(`Failed to disapprove member: ${error.message}`);
+  } finally {
+    session.endSession();
+  }
+};
+
+// Helper function to generate secure password
+const generateSecurePassword = () => {
+  const length = 12;
+  const charset =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+  let password = "";
+
+  // Ensure at least one of each required character type
+  password += "ABCDEFGHIJKLMNOPQRSTUVWXYZ".charAt(
+    Math.floor(Math.random() * 26)
+  ); // uppercase
+  password += "abcdefghijklmnopqrstuvwxyz".charAt(
+    Math.floor(Math.random() * 26)
+  ); // lowercase
+  password += "0123456789".charAt(Math.floor(Math.random() * 10)); // number
+  password += "!@#$%^&*".charAt(Math.floor(Math.random() * 8)); // special char
+
+  // Fill the rest randomly
+  for (let i = password.length; i < length; i++) {
+    password += charset.charAt(Math.floor(Math.random() * charset.length));
+  }
+
+  // Shuffle the password
+  return password
+    .split("")
+    .sort(() => 0.5 - Math.random())
+    .join("");
+};
+
+// Helper function to send approval email
+const sendApprovalEmail = async (member, password) => {
+  try {
+    const fullName = `${member.firstName} ${member.surName}`;
+    const emailContent = `
       <h2>Welcome to AI Skilling Alliance!</h2>
       <p>Dear ${fullName},</p>
       <p>Congratulations! Your application to join the Kenya AI Skilling Alliance (KAISA) has been approved.</p>
-      <p>You can now access and or upload courses, get KAISA programs, training opportunities and partner resources.
-</p>
-      <p><strong>Please use the following to details to sign in</strong></p>
+      <p>You can now access and upload courses, get KAISA programs, training opportunities and partner resources.</p>
+      <p><strong>Please use the following details to sign in:</strong></p>
       <ul>
-        <li>Email: ${email}</li>
-        <li>Password: ${password}</li>
+        <li><strong>Email:</strong> ${member.email}</li>
+        <li><strong>Password:</strong> ${password}</li>
       </ul>
       <p>We're excited to have you on board!</p>
       <br>
       <p>Best regards,<br>AI Skilling Alliance Team</p>
     `;
 
-      await sendEmail({
-        to: email, // receiver email address
-        subject: "Your KAISA Membership Has Been Approved",
-        html: generateEmailTemplate(
-          emailContent,
-          "Your KAISA Membership Has Been Approved"
-        ),
-      });
-    }
-  }
+    await sendEmail({
+      to: member.email,
+      subject: "Your KAISA Membership Has Been Approved",
+      html: generateEmailTemplate(
+        emailContent,
+        "Your KAISA Membership Has Been Approved"
+      ),
+    });
 
-  // if member is unapproved: send an email notification and delete user from db.
-  if (!updatedMember.approved) {
-    const { email } = updatedMember;
-    // Delete user
-    await User.findOneAndDelete({ email: email });
-    // send email notification logic here
-    let fullName = `${updatedMember.firstName} ${updatedMember.surName}`;
+    console.log(`Approval email sent to: ${member.email}`);
+  } catch (emailError) {
+    console.error("Failed to send approval email:", emailError);
+    // Don't throw error here - email failure shouldn't break the approval process
+  }
+};
+
+// Helper function to send disapproval email
+const sendDisapprovalEmail = async (member) => {
+  try {
+    const fullName = `${member.firstName} ${member.surName}`;
     const emailContent = `
-      <h2>KAISA Membership Update!</h2>
+      <h2>KAISA Membership Update</h2>
       <p>Dear ${fullName},</p>
       <p>We regret to inform you that your membership with the Kenya AI Skilling Alliance (KAISA) has been revoked.</p>
-      <p>If you believe this is a mistake or have any questions, please contact our support team for assistance.
-</p>
-     
-       <p>We appreciate your understanding in this matter.</p>
+      <p>If you believe this is a mistake or have any questions, please contact our support team for assistance.</p>
+      <p>We appreciate your understanding in this matter.</p>
       <br>
       <p>Best regards,<br>AI Skilling Alliance Team</p>
-      <br>
-     
     `;
 
     await sendEmail({
-      to: email, // receiver email address
+      to: member.email,
       subject: "Your KAISA Membership Has Been Revoked",
       html: generateEmailTemplate(
         emailContent,
         "Your KAISA Membership Has Been Revoked"
       ),
     });
-  }
 
-  if (!updatedMember) {
-    res.status(400).send("Failed to update approved status");
-    return;
+    console.log(`Disapproval email sent to: ${member.email}`);
+  } catch (emailError) {
+    console.error("Failed to send disapproval email:", emailError);
+    // Don't throw error here - email failure shouldn't break the disapproval process
   }
-
-  res.json(updatedMember);
-});
+};
