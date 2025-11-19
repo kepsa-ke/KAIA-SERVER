@@ -294,6 +294,8 @@ exports.deleteOrganization = asyncHandler(async (req, res) => {
 //   res.json(updatedMember);
 // });
 
+// Helper function for member approval
+
 exports.toggleApproval = asyncHandler(async (req, res) => {
   const memberId = req.params.id;
 
@@ -317,6 +319,15 @@ exports.toggleApproval = asyncHandler(async (req, res) => {
 
     // Toggle approval status
     const newApprovalStatus = !member.approved;
+
+    // Handle approval/disapproval first
+    if (newApprovalStatus) {
+      await handleMemberApproval(member);
+    } else {
+      await handleMemberDisapproval(member);
+    }
+
+    // Then update member status
     const updatedMember = await Member.findByIdAndUpdate(
       memberId,
       { approved: newApprovalStatus },
@@ -328,13 +339,6 @@ exports.toggleApproval = asyncHandler(async (req, res) => {
         success: false,
         message: "Failed to update member approval status",
       });
-    }
-
-    // Handle approval flow
-    if (newApprovalStatus) {
-      await handleMemberApproval(updatedMember);
-    } else {
-      await handleMemberDisapproval(updatedMember);
     }
 
     res.json({
@@ -349,23 +353,19 @@ exports.toggleApproval = asyncHandler(async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Internal server error while processing approval",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+      error: error.message,
     });
   }
 });
 
-// Helper function for member approval
 const handleMemberApproval = async (member) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const { email, organizationName, phone, firstName, surName } = member;
 
     // Check for existing user
     const existingUser = await User.findOne({
       $or: [{ email }, { phone }],
-    }).session(session);
+    });
 
     if (existingUser) {
       if (existingUser.email === email) {
@@ -384,19 +384,14 @@ const handleMemberApproval = async (member) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create user account
-    const user = await User.create(
-      [
-        {
-          email,
-          organizationName,
-          phone,
-          password: hashedPassword,
-          username: `${firstName.toLowerCase()}.${surName.toLowerCase()}`,
-          isActive: true,
-        },
-      ],
-      { session }
-    );
+    const user = await User.create([
+      {
+        email,
+        organizationName,
+        phone,
+        password: hashedPassword,
+      },
+    ]);
 
     if (!user || user.length === 0) {
       throw new Error("Failed to create user account");
@@ -404,80 +399,38 @@ const handleMemberApproval = async (member) => {
 
     // Prepare and send approval email
     await sendApprovalEmail(member, password);
-
-    await session.commitTransaction();
-    console.log(
-      `Successfully approved member: ${email} and created user account`
-    );
   } catch (error) {
-    await session.abortTransaction();
     console.error("Member approval failed:", error);
 
     // Revert member approval status if user creation fails
     await Member.findByIdAndUpdate(member._id, { approved: false });
 
     throw new Error(`Failed to approve member: ${error.message}`);
-  } finally {
-    session.endSession();
   }
 };
 
 // Helper function for member disapproval
 const handleMemberDisapproval = async (member) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
-    const { email, firstName, surName } = member;
+    const { email } = member;
 
     // Delete user account if exists
-    const deletedUser = await User.findOneAndDelete({ email }).session(session);
+    const deletedUser = await User.findOneAndDelete({ email });
 
     if (deletedUser) {
       console.log(`Deleted user account for: ${email}`);
     }
 
-    // Send disapproval email
-    await sendDisapprovalEmail(member);
+    // Send disapproval email (fire and forget to avoid timeouts)
+    sendDisapprovalEmail(member).catch((emailError) => {
+      console.error("Failed to send disapproval email:", emailError);
+    });
 
-    await session.commitTransaction();
     console.log(`Successfully disapproved member: ${email}`);
   } catch (error) {
-    await session.abortTransaction();
     console.error("Member disapproval failed:", error);
     throw new Error(`Failed to disapprove member: ${error.message}`);
-  } finally {
-    session.endSession();
   }
-};
-
-// Helper function to generate secure password
-const generateSecurePassword = () => {
-  const length = 12;
-  const charset =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
-  let password = "";
-
-  // Ensure at least one of each required character type
-  password += "ABCDEFGHIJKLMNOPQRSTUVWXYZ".charAt(
-    Math.floor(Math.random() * 26)
-  ); // uppercase
-  password += "abcdefghijklmnopqrstuvwxyz".charAt(
-    Math.floor(Math.random() * 26)
-  ); // lowercase
-  password += "0123456789".charAt(Math.floor(Math.random() * 10)); // number
-  password += "!@#$%^&*".charAt(Math.floor(Math.random() * 8)); // special char
-
-  // Fill the rest randomly
-  for (let i = password.length; i < length; i++) {
-    password += charset.charAt(Math.floor(Math.random() * charset.length));
-  }
-
-  // Shuffle the password
-  return password
-    .split("")
-    .sort(() => 0.5 - Math.random())
-    .join("");
 };
 
 // Helper function to send approval email
