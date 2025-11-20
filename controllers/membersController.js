@@ -431,6 +431,8 @@ const handleMemberDisapproval = async (member) => {
   }
 };
 
+//dont send emails when disapproving members to avoid spamming
+
 // Helper function to send approval email
 const sendApprovalEmail = async (member, password) => {
   try {
