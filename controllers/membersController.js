@@ -422,9 +422,9 @@ const handleMemberDisapproval = async (member) => {
     }
 
     // Send disapproval email (fire and forget to avoid timeouts)
-    sendDisapprovalEmail(member).catch((emailError) => {
-      console.error("Failed to send disapproval email:", emailError);
-    });
+    // sendDisapprovalEmail(member).catch((emailError) => {
+    //   console.error("Failed to send disapproval email:", emailError);
+    // });
   } catch (error) {
     console.error("Member disapproval failed:", error);
     throw new Error(`Failed to disapprove member: ${error.message}`);
