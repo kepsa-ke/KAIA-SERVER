@@ -360,7 +360,7 @@ exports.toggleApproval = asyncHandler(async (req, res) => {
 
 const handleMemberApproval = async (member) => {
   try {
-    const { email, organizationName, phone, firstName, surName } = member;
+    const { email, organizationName, phone } = member;
 
     // Check for existing user
     const existingUser = await User.findOne({
@@ -384,14 +384,12 @@ const handleMemberApproval = async (member) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create user account
-    const user = await User.create([
-      {
-        email,
-        organizationName,
-        phone,
-        password: hashedPassword,
-      },
-    ]);
+    const user = await User.create({
+      email,
+      organizationName,
+      phone,
+      password: hashedPassword,
+    });
 
     if (!user || user.length === 0) {
       throw new Error("Failed to create user account");
