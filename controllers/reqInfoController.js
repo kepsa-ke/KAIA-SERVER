@@ -93,7 +93,7 @@ exports.toggleHandling = asyncHandler(async (req, res) => {
   const updatedRequest = await ReqInfo.findByIdAndUpdate(
     reqId,
     { reqStatus: !reqInfo.reqStatus },
-    { new: true }
+    { new: true },
   );
 
   if (!updatedRequest) {
