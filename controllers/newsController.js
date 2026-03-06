@@ -25,7 +25,7 @@ exports.createNews = asyncHandler(async (req, res) => {
       externalLink: externalLink || "",
       hashtags: processedHashtags,
       createdBy: req.user.id,
-      published: true, // Auto-published
+      published: false, // Auto-published
       publishedAt: new Date(),
     });
 
@@ -94,6 +94,33 @@ exports.getNews = asyncHandler(async (req, res) => {
         pages: Math.ceil(total / limit),
         hasMore: page < Math.ceil(total / limit),
       },
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// @desc    Get recent 5 published news (public)
+// @route   GET /api/news/recent
+// @access  Public
+exports.getRecentNews = asyncHandler(async (req, res) => {
+  try {
+    // Build query - only published news
+    let query = { published: true };
+
+    // Get only 5 most recent news items
+    const news = await News.find(query)
+      .sort({ publishedAt: -1, createdAt: -1 })
+      .limit(5)
+      .populate("createdBy", "organizationName email");
+
+    res.json({
+      success: true,
+      data: news,
+      count: news.length,
     });
   } catch (error) {
     res.status(400).json({

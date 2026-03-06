@@ -25,7 +25,7 @@ exports.createBlogAd = asyncHandler(async (req, res) => {
     category,
     tags: processedTags,
     createdBy: req.user.id,
-    published: true, // Auto-published
+    published: false, // Auto-published
     publishedAt: new Date(),
   });
 

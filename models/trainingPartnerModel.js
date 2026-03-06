@@ -197,7 +197,7 @@ const trainingPartnerSchema = new mongoose.Schema(
     // Publishing status (admin can unpublish if needed)
     published: {
       type: Boolean,
-      default: true,
+      default: false,
     },
   },
   {

@@ -48,7 +48,7 @@ exports.createImpactReport = asyncHandler(async (req, res) => {
   }
 });
 
-// Fetch Reports (with search & filtering)
+// Fetch Reports (with search & filtering). Admins and Leaders can access this, but leaders will only see their own org's reports. They will see irregardless of published status.
 exports.getImpactReports = asyncHandler(async (req, res) => {
   try {
     const { year, month, createdBy, organizationName, search } = req.query;
@@ -89,7 +89,50 @@ exports.getImpactReports = asyncHandler(async (req, res) => {
   }
 });
 
-// Update Report
+//for the public page - only published reports should be visible.
+exports.getPublicPublishedImpactReports = asyncHandler(async (req, res) => {
+  try {
+    const { year, month, createdBy, organizationName, search } = req.query;
+
+    // Base filter - only published reports
+    const filters = {
+      published: true,
+    };
+
+    if (year) filters.year = Number(year);
+    if (month) filters.month = Number(month);
+    if (createdBy) filters.createdBy = createdBy;
+    if (organizationName)
+      filters.organizationName = { $regex: organizationName, $options: "i" };
+
+    // If searching by keyword (match organizationName or email)
+    if (search) {
+      filters.$or = [
+        { organizationName: { $regex: search, $options: "i" } },
+        { createdBy: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const reports = await ImpactReport.find(filters).sort({
+      year: -1,
+      month: -1, // Most recent month first
+    });
+
+    // Add monthName virtual to each report for easier frontend display
+    const reportsWithMonthName = reports.map((report) => ({
+      ...report.toObject(),
+      monthName: report.monthName,
+    }));
+
+    res.status(200).json(reportsWithMonthName);
+  } catch (error) {
+    console.error("Error fetching reports:", error);
+    res
+      .status(500)
+      .json({ message: "Error fetching reports.", error: error.message });
+  }
+});
+
 // Update Report
 exports.updateImpactReport = asyncHandler(async (req, res) => {
   try {
@@ -270,7 +313,9 @@ exports.getReportsSummary = asyncHandler(async (req, res) => {
   try {
     const { year } = req.query;
 
-    const matchStage = {};
+    const matchStage = {
+      published: true, // Only include published reports
+    };
     if (year) matchStage.year = Number(year);
 
     const summary = await ImpactReport.aggregate([
@@ -295,5 +340,36 @@ exports.getReportsSummary = asyncHandler(async (req, res) => {
     res
       .status(500)
       .json({ message: "Error generating summary.", error: error.message });
+  }
+});
+
+// Toggle published status of a report (admin only)
+exports.toggleReportPublished = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const report = await ImpactReport.findById(id);
+
+    if (!report) {
+      return res.status(404).json({ message: "Report not found." });
+    }
+
+    // Toggle the published status
+    report.published = !report.published;
+    await report.save();
+
+    res.status(200).json({
+      message: `Report ${report.published ? "published" : "unpublished"} successfully.`,
+      report: {
+        ...report.toObject(),
+        monthName: report.monthName,
+      },
+    });
+  } catch (error) {
+    console.error("Error toggling report publication:", error);
+    res.status(500).json({
+      message: "Error updating report publication status.",
+      error: error.message,
+    });
   }
 });

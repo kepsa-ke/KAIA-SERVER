@@ -10,7 +10,8 @@ const {
   deleteNews,
   getAllHashtags,
   getMyNews,
-  getAllNewsAdmin, // Make sure this is imported
+  getAllNewsAdmin,
+  getRecentNews,
 } = require("../controllers/newsController");
 
 // Import your protect middleware
@@ -19,6 +20,7 @@ const { protect } = require("../middlewares/authMiddleware");
 // PUBLIC ROUTES (order matters - specific routes first)
 router.get("/", getNews);
 router.get("/hashtags/all", getAllHashtags);
+router.get("/recent", getRecentNews);
 
 // PROTECTED ROUTES (specific routes before parameterized routes)
 router.get("/my-news", protect, getMyNews); // This must come BEFORE /:id

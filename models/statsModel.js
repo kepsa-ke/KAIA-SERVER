@@ -33,6 +33,10 @@ const impactReportSchema = new mongoose.Schema(
     organizationName: {
       type: String,
     },
+    published: {
+      type: Boolean,
+      default: false, // has to be enabled to be viewed
+    },
   },
   {
     timestamps: true,

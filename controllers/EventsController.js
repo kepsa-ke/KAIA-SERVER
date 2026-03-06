@@ -51,7 +51,7 @@ exports.createEvent = asyncHandler(async (req, res) => {
     eventLink: eventLink || "",
     hashtags: processedHashtags,
     createdBy: req.user.id,
-    published: true, // Auto-published
+    published: false, // Auto-published
   });
 
   res.status(201).json({
@@ -138,6 +138,66 @@ exports.getEvents = asyncHandler(async (req, res) => {
       hasMore: page < Math.ceil(total / limit),
     },
   });
+});
+
+// @desc    Get recent 5 published events (public)
+// @route   GET /api/events/recent
+// @access  Public
+exports.getRecentEvents = asyncHandler(async (req, res) => {
+  try {
+    // Build query - only published events
+    let query = { published: true };
+
+    // Get only 5 most recent events (by creation date)
+    const events = await Event.find(query)
+      .sort({ createdAt: -1, startDate: -1 }) // Sort by creation date first, then start date
+      .limit(5)
+      .populate("createdBy", "organizationName email");
+
+    // Format events to include status and ensure consistent data structure
+    const formattedEvents = events.map((event) => {
+      const now = new Date();
+      let status = "upcoming";
+
+      if (event.endDate < now) {
+        status = "past";
+      } else if (event.startDate <= now && event.endDate >= now) {
+        status = "ongoing";
+      }
+
+      return {
+        ...event.toObject(),
+        status, // Add computed status
+        formattedDate: {
+          start: event.startDate.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }),
+          end: event.endDate.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }),
+          time: event.startDate.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        },
+      };
+    });
+
+    res.json({
+      success: true,
+      data: formattedEvents,
+      count: formattedEvents.length,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error.message,
+    });
+  }
 });
 
 // @desc    Get single event

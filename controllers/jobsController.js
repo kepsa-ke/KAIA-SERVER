@@ -68,7 +68,7 @@ exports.createJob = asyncHandler(async (req, res) => {
     tags: processedTags,
     experienceLevel: experienceLevel || "mid",
     createdBy: req.user.id,
-    published: true, // Auto-published
+    published: false, // Auto-published
     publishedAt: new Date(),
   });
 
