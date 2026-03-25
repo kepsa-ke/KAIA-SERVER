@@ -5,7 +5,7 @@ const sendEmail = async (options) => {
   try {
     const mailOptions = {
       from: {
-        name: "AI Skilling Alliance - KEPSA",
+        name: "Kenya AI Skilling Alliance",
         address: "aiskillingalliance@kepsa.or.ke", // This will show as "from" but you can customize the name
       },
       to: options.to,
@@ -69,7 +69,7 @@ const generateEmailTemplate = (content, title = "") => {
     </head>
     <body>
         <div class="header">
-            <h1>AI Skilling Alliance</h1>
+            <h1>Kenya AI Skilling Alliance</h1>
             <p>Empowering Kenya through AI Education</p>
         </div>
         <div class="content">
