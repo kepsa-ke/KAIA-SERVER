@@ -140,34 +140,37 @@ exports.getEvents = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Get recent 5 published events (public)
+// @desc    Get recent 8 published events (public)
 // @route   GET /api/events/recent
 // @access  Public
 exports.getRecentEvents = asyncHandler(async (req, res) => {
   try {
-    // Build query - only published events
-    let query = { published: true };
+    const now = new Date();
 
-    // Get only 5 most recent events (by creation date)
+    let query = {
+      published: true,
+      startDate: { $lte: now }, // Events where start date is less than or equal to current time
+    };
+
+    // Get only 5 most recent events (by start date, most recent first)
     const events = await Event.find(query)
-      .sort({ createdAt: -1, startDate: -1 }) // Sort by creation date first, then start date
-      .limit(5)
+      .sort({ startDate: -1 }) // Descending order (most recent start date first)
+      .limit(8)
       .populate("createdBy", "organizationName email");
 
     // Format events to include status and ensure consistent data structure
     const formattedEvents = events.map((event) => {
-      const now = new Date();
-      let status = "upcoming";
-
+      // Calculate accurate status
+      let status;
       if (event.endDate < now) {
         status = "past";
-      } else if (event.startDate <= now && event.endDate >= now) {
+      } else {
         status = "ongoing";
       }
 
       return {
         ...event.toObject(),
-        status, // Add computed status
+        eventStatus: status, // Set calculated status
         formattedDate: {
           start: event.startDate.toLocaleDateString("en-US", {
             month: "short",
@@ -191,6 +194,71 @@ exports.getRecentEvents = asyncHandler(async (req, res) => {
       success: true,
       data: formattedEvents,
       count: formattedEvents.length,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// @desc    Get upcoming events only (public)
+// @route   GET /api/events/upcoming
+// @access  Public
+// @param   ?limit=10 (optional, defaults to all)
+exports.getUpcomingEvents = asyncHandler(async (req, res) => {
+  try {
+    const now = new Date();
+    const limit = 8;
+
+    // Build query - only published upcoming events
+    let query = {
+      published: true,
+      startDate: { $gt: now }, // Future events only
+      eventStatus: "upcoming",
+    };
+
+    // Create query
+    let eventsQuery = Event.find(query)
+      .sort({ createdAt: -1 }) // Descending order (newest first)
+      .populate("createdBy", "organizationName email");
+
+    // Apply limit if specified
+    if (limit && limit > 0) {
+      eventsQuery = eventsQuery.limit(limit);
+    }
+
+    const events = await eventsQuery;
+
+    // Format events
+    const formattedEvents = events.map((event) => {
+      return {
+        ...event.toObject(),
+        formattedDate: {
+          start: event.startDate.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }),
+          end: event.endDate.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }),
+          time: event.startDate.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        },
+      };
+    });
+
+    res.json({
+      success: true,
+      data: formattedEvents,
+      count: formattedEvents.length,
+      ...(limit && { limit }),
     });
   } catch (error) {
     res.status(400).json({

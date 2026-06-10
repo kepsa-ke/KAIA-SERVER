@@ -14,6 +14,7 @@ const {
   getMyEvents,
   getAllEventsAdmin,
   getRecentEvents,
+  getUpcomingEvents,
 } = require("../controllers/EventsController");
 
 // Import your protect middleware
@@ -21,6 +22,7 @@ const { protect } = require("../middlewares/authMiddleware");
 
 router.get("/", getEvents);
 router.get("/recent", getRecentEvents);
+router.get("/upcoming", getUpcomingEvents);
 router.get("/my-events/stats", protect, getMyEventStats);
 router.get("/my-events", protect, getMyEvents);
 router.get("/hashtags/all", getAllHashtags);

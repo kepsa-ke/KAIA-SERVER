@@ -20,7 +20,7 @@ const coursesSchema = new mongoose.Schema(
     },
     tag: {
       type: String,
-      required: true,
+      default: "",
     },
     category: {
       type: String,
@@ -29,7 +29,7 @@ const coursesSchema = new mongoose.Schema(
     // contact person for the course
     email: {
       type: String,
-      required: true,
+      default: "",
     },
     image: {
       type: String,
@@ -40,19 +40,24 @@ const coursesSchema = new mongoose.Schema(
       default: false,
     },
 
-    // New fields for segmentation
-    segment: {
-      type: String,
-      enum: ["featured", "topic", "role"], // classification of the course
-      default: "role", // all existing courses fall under 'by role'
-    },
     featured: {
       type: Boolean,
       default: false, // only admin can toggle this true
     },
+    createdBy: {
+      type: String, // Stores the email of the creator
+      required: true,
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
+
+coursesSchema.index({
+  title: "text",
+  desc: "text",
+  organization: "text",
+  category: "text",
+});
 
 const Course = mongoose.model("Courses", coursesSchema);
 

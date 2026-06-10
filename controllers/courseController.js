@@ -1,6 +1,5 @@
 const Course = require("../models/coursesModel");
 const User = require("../models/userModels");
-const cloudinary = require("../config/cloudinary");
 const asyncHandler = require("express-async-handler");
 
 // create a course
@@ -10,28 +9,19 @@ exports.createCourse = asyncHandler(async (req, res) => {
   if (!req.body) {
     return res.status(400).send("No request body provided");
   }
-
   const {
     title,
     desc,
     link,
     tag,
-    organization,
+
     category,
     image,
     segment,
     featured,
   } = req.body;
 
-  const requiredFields = [
-    "title",
-    "desc",
-    "link",
-    "tag",
-    "organization",
-    "category",
-    "image",
-  ];
+  const requiredFields = ["title", "desc", "link", "category", "image"];
 
   for (const field of requiredFields) {
     if (!req.body[field]) {
@@ -40,22 +30,10 @@ exports.createCourse = asyncHandler(async (req, res) => {
   }
 
   let email = req.user?.email; // get email from user through middleware
+  let createdBy = req.user?.email; // get email from user through middleware
+  let organization = req.user?.organizationName; // get organization name from user through middleware
   if (!email) {
     return res.status(400).send("No email passed with request");
-  }
-
-  // Ensure segment is valid and default safely
-  const validSegments = ["topic", "role"];
-  const courseSegment = validSegments.includes(segment) ? segment : "role";
-
-  // Ensure only admin can feature and only one featured at a time
-  let isFeatured = false;
-  if (featured && req.user?.isAdmin) {
-    const existingFeatured = await Course.findOne({ featured: true });
-    if (existingFeatured) {
-      return res.status(400).send("Only one course can be featured at a time");
-    }
-    isFeatured = true;
   }
 
   const course = await Course.create({
@@ -66,9 +44,9 @@ exports.createCourse = asyncHandler(async (req, res) => {
     tag,
     category,
     email,
+    createdBy,
     image,
-    segment: courseSegment, // either "topic" or "role" (default)
-    featured: isFeatured,
+    featured: featured || false, // default to false if not provided
   });
 
   if (course) {
@@ -89,16 +67,142 @@ exports.getAllCourses = asyncHandler(async (req, res) => {
   }
 });
 
-//fetch only approved courses
-exports.fetchApprovedCourses = asyncHandler(async (req, res) => {
-  let approved = true;
-  const courses = await Course.find({ approved }).sort({ $natural: -1 });
-  if (courses) {
-    res.status(200).json(courses);
-    return;
-  } else {
-    throw new Error("Error Fetching Courses");
+// Fetch courses created by the logged-in leader
+exports.fetchMyCourses = asyncHandler(async (req, res) => {
+  // Get the logged-in user's email from the auth middleware
+  const userEmail = req.user.email;
+
+  // Pagination parameters
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  // Build query to find courses created by this user
+  const query = { createdBy: userEmail };
+
+  // Optional filters
+  if (req.query.approved === "true") {
+    query.approved = true;
+  } else if (req.query.approved === "false") {
+    query.approved = false;
   }
+
+  if (req.query.category) {
+    query.category = req.query.category;
+  }
+
+  if (req.query.tag) {
+    query.tag = req.query.tag;
+  }
+
+  // Get total count for pagination
+  const totalCourses = await Course.countDocuments(query);
+
+  // Fetch courses with pagination
+  const courses = await Course.find(query)
+    .sort({ createdAt: -1 }) // Newest first
+    .skip(skip)
+    .limit(limit);
+
+  if (courses) {
+    res.status(200).json({
+      success: true,
+      data: courses,
+      pagination: {
+        currentPage: page,
+        limit: limit,
+        totalPages: Math.ceil(totalCourses / limit),
+        totalItems: totalCourses,
+        hasNextPage: page * limit < totalCourses,
+        nextPage: page + 1,
+      },
+      summary: {
+        total: totalCourses,
+        approved: courses.filter((c) => c.approved).length,
+        pending: courses.filter((c) => !c.approved).length,
+        totalViews: courses.reduce((sum, c) => sum + (c.views || 0), 0),
+        totalEnrollments: courses.reduce(
+          (sum, c) => sum + (c.enrollments || 0),
+          0,
+        ),
+      },
+    });
+  } else {
+    res.status(404);
+    throw new Error("No courses found");
+  }
+});
+
+//fetch only approved courses with pagination, search, and filters
+// @desc    Fetch approved courses with pagination, search, and filters
+// @route   GET /api/courses/approved
+// @access  Public
+exports.fetchApprovedCourses = asyncHandler(async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 12;
+  const search = req.query.search?.trim() || "";
+  const category = req.query.category?.trim() || "";
+  const organization = req.query.organization?.trim() || "";
+
+  const skip = (page - 1) * limit;
+
+  // Build query - ONLY approved courses
+  const query = { approved: true };
+  const andConditions = [];
+
+  // Search: looks in title, desc, organization, category, tag
+  // Only apply if search has actual content
+  if (search && search.length > 0) {
+    andConditions.push({
+      $or: [
+        { title: { $regex: search, $options: "i" } },
+        { desc: { $regex: search, $options: "i" } },
+        { organization: { $regex: search, $options: "i" } },
+        { category: { $regex: search, $options: "i" } },
+        { tag: { $regex: search, $options: "i" } },
+      ],
+    });
+  }
+
+  // Category filter (exact match, not regex - more accurate)
+  if (category && category !== "all" && category.length > 0) {
+    andConditions.push({ category });
+  }
+
+  // Organization filter
+  if (organization && organization.length > 0) {
+    andConditions.push({
+      organization: { $regex: organization, $options: "i" },
+    });
+  }
+
+  // If we have additional conditions, wrap them with $and
+  if (andConditions.length > 0) {
+    query.$and = andConditions;
+  }
+
+  // Get total count for pagination
+  const totalCourses = await Course.countDocuments(query);
+
+  // Fetch paginated courses
+  const courses = await Course.find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean(); // .lean() for better performance
+
+  res.status(200).json({
+    success: true,
+    data: courses,
+    pagination: {
+      currentPage: page,
+      limit,
+      totalPages: Math.ceil(totalCourses / limit),
+      totalItems: totalCourses,
+      hasNextPage: page * limit < totalCourses,
+      nextPage: page + 1,
+    },
+  });
 });
 
 // fetch specific course
@@ -138,7 +242,7 @@ exports.updateSpecificCourse = asyncHandler(async (req, res) => {
     req.body,
     {
       new: true,
-    }
+    },
   );
 
   if (updatedCourse) {
@@ -175,7 +279,7 @@ exports.toggleApproval = asyncHandler(async (req, res) => {
   const updatedCourse = await Course.findByIdAndUpdate(
     courseId,
     { approved: !course.approved },
-    { new: true }
+    { new: true },
   );
 
   if (!updatedCourse) {

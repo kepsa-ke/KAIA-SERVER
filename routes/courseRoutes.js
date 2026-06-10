@@ -8,15 +8,17 @@ const {
   permanentlyDeleteCourse,
   fetchApprovedCourses,
   toggleApproval,
+  fetchMyCourses,
 } = require("../controllers/courseController");
 const { protect } = require("../middlewares/authMiddleware");
 
 router.post("/", protect, createCourse);
-router.get("/", getAllCourses);
+router.get("/", protect, getAllCourses);
 router.get("/approved", fetchApprovedCourses);
+router.get("/my-courses", protect, fetchMyCourses);
 router.get("/:id", fetchSpecifiCourse);
 router.put("/:id", protect, updateSpecificCourse);
 router.delete("/:id", protect, permanentlyDeleteCourse);
-router.patch("/:id/toggle-approval", toggleApproval);
+router.patch("/:id/toggle-approval", protect, toggleApproval);
 
 module.exports = router;
