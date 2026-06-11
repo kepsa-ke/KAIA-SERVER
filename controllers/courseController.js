@@ -3,7 +3,6 @@ const User = require("../models/userModels");
 const asyncHandler = require("express-async-handler");
 
 // create a course
-// create a course
 exports.createCourse = asyncHandler(async (req, res) => {
   // Validate request body
   if (!req.body) {
@@ -133,7 +132,6 @@ exports.fetchMyCourses = asyncHandler(async (req, res) => {
   }
 });
 
-//fetch only approved courses with pagination, search, and filters
 // @desc    Fetch approved courses with pagination, search, and filters
 // @route   GET /api/courses/approved
 // @access  Public

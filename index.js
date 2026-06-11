@@ -26,5 +26,6 @@ app.use("/api/v1/blog-ads", require("./routes/blogsRoutes"));
 app.use("/api/v1/events", require("./routes/eventsRoutes"));
 app.use("/api/v1/jobs", require("./routes/jobsRoutes"));
 app.use("/api/v1/training-partners", require("./routes/trainingPartnerRoutes"));
+app.use("/api/v1/insights", require("./routes/insightRoutes"));
 
 app.listen(port, () => console.log(`Server started on port ${port}`));
