@@ -122,7 +122,7 @@ exports.getEvents = asyncHandler(async (req, res) => {
 
   // Get events
   const events = await Event.find(query)
-    .sort({ startDate: 1 }) // Show upcoming events first
+    .sort({ createdAt: -1 }) // newest first
     .skip(skip)
     .limit(limit)
     .populate("createdBy", "organizationName email");
